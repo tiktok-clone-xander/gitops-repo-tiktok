@@ -1,0 +1,102 @@
+# =============================================================================
+# STAGING Environment Values
+# =============================================================================
+# Staging mirrors production config nhưng với ít resources hơn
+# Image tags được promote từ dev thông qua promote-environment workflow
+# =============================================================================
+
+global:
+  environment: staging
+  domain: staging.tiktok-clone.local
+  imagePullPolicy: IfNotPresent
+
+namespace: tiktok-clone-staging
+
+postgresql:
+  persistence:
+    size: 20Gi
+
+redis:
+  persistence:
+    size: 5Gi
+
+kafka:
+  brokers: 1
+
+# =============================================================================
+# Services - Image tags promoted from DEV
+# =============================================================================
+services:
+  gateway:
+    replicas: 2
+    image:
+      repository: ghcr.io/OWNER/tiktok/api-gateway
+      tag: latest # Promoted from dev
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 75
+
+  auth:
+    replicas: 2
+    image:
+      repository: ghcr.io/OWNER/tiktok/auth-service
+      tag: latest
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 70
+
+  video:
+    replicas: 2
+    image:
+      repository: ghcr.io/OWNER/tiktok/video-service
+      tag: latest
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 70
+
+  interaction:
+    replicas: 2
+    image:
+      repository: ghcr.io/OWNER/tiktok/interaction-service
+      tag: latest
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 70
+
+  notification:
+    replicas: 2
+    image:
+      repository: ghcr.io/OWNER/tiktok/notification-service
+      tag: latest
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 4
+      targetCPUUtilizationPercentage: 70
+
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+  grafana:
+    enabled: true
+  loki:
+    enabled: true
+  alertmanager:
+    enabled: true
+
+seeding:
+  enabled: false
+
+ingress:
+  enabled: true
+  className: nginx
+  host: staging.tiktok-clone.local

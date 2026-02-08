@@ -1,0 +1,63 @@
+# =============================================================================
+# ArgoCD Application - PRODUCTION Environment
+# =============================================================================
+# PRODUCTION: NO auto-sync! Chỉ manual sync sau khi approval
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tiktok-clone-prod
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: tiktok-clone
+    environment: production
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: tiktok-prod-alerts
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: tiktok-prod-alerts
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: tiktok-prod-alerts
+spec:
+  project: tiktok-clone
+
+  source:
+    repoURL: https://github.com/<ORG>/tiktok-gitops.git
+    targetRevision: main
+    path: helm/tiktok-clone
+    helm:
+      releaseName: tiktok-clone-prod
+      valueFiles:
+        - values.yaml
+        - ../../environments/production/values.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tiktok-clone-prod
+
+  # ============================================================================
+  # PRODUCTION: NO AUTO-SYNC!
+  # Sync thủ công qua ArgoCD UI hoặc CLI sau khi review
+  # ============================================================================
+  syncPolicy:
+    # automated: DISABLED cho production
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 3
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m
+
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+      jsonPointers:
+        - /spec/metrics
+
+  revisionHistoryLimit: 30

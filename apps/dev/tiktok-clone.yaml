@@ -1,0 +1,75 @@
+# =============================================================================
+# ArgoCD Application - DEV Environment
+# =============================================================================
+# ArgoCD watches THIS repo (tiktok-gitops) - NOT the app repo
+# Source of truth: helm/ chart + environments/dev/values.yaml
+# =============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: tiktok-clone-dev
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: tiktok-clone
+    environment: dev
+  annotations:
+    # Notifications
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: tiktok-dev
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: tiktok-dev
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: tiktok-dev
+spec:
+  project: tiktok-clone
+
+  # ============================================================================
+  # SOURCE: GitOps repo (NOT app repo!)
+  # ============================================================================
+  source:
+    repoURL: https://github.com/<ORG>/tiktok-gitops.git
+    targetRevision: main
+    path: helm/tiktok-clone
+
+    helm:
+      releaseName: tiktok-clone-dev
+      valueFiles:
+        # Base values + dev overrides
+        - values.yaml
+        - ../../environments/dev/values.yaml
+
+  # ============================================================================
+  # DESTINATION: K8s cluster
+  # ============================================================================
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: tiktok-clone-dev
+
+  # ============================================================================
+  # SYNC POLICY: Auto-sync for DEV
+  # ============================================================================
+  syncPolicy:
+    automated:
+      prune: true # Remove resources not in Git
+      selfHeal: true # Auto-fix drift
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  # Ignore differences for fields that K8s mutates
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+      jsonPointers:
+        - /spec/metrics
+
+  revisionHistoryLimit: 10

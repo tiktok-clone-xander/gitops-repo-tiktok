@@ -1,0 +1,61 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: tiktok-clone
+  namespace: argocd
+spec:
+  description: TikTok Clone Microservices Project
+
+  # Source repos - CHỈ cho phép GitOps repo
+  sourceRepos:
+    - 'https://github.com/<ORG>/tiktok-gitops.git'
+
+  # Destinations - clusters & namespaces cho phép deploy
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: tiktok-clone-dev
+    - server: https://kubernetes.default.svc
+      namespace: tiktok-clone-staging
+    - server: https://kubernetes.default.svc
+      namespace: tiktok-clone-prod
+
+  # Cluster resource whitelist
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRole
+    - group: 'rbac.authorization.k8s.io'
+      kind: ClusterRoleBinding
+
+  # Namespace resource blacklist (security)
+  namespaceResourceBlacklist:
+    - group: ''
+      kind: ResourceQuota
+    - group: ''
+      kind: LimitRange
+
+  # Roles
+  roles:
+    - name: developer
+      description: Developer access
+      policies:
+        - p, proj:tiktok-clone:developer, applications, get, tiktok-clone/*, allow
+        - p, proj:tiktok-clone:developer, applications, sync, tiktok-clone/*-dev, allow
+      groups:
+        - tiktok-developers
+
+    - name: lead
+      description: Tech Lead access
+      policies:
+        - p, proj:tiktok-clone:lead, applications, *, tiktok-clone/*, allow
+      groups:
+        - tiktok-leads
+
+    - name: admin
+      description: Admin access
+      policies:
+        - p, proj:tiktok-clone:admin, applications, *, tiktok-clone/*, allow
+        - p, proj:tiktok-clone:admin, repositories, *, tiktok-clone/*, allow
+      groups:
+        - tiktok-admins

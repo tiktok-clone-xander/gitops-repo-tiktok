@@ -1,0 +1,183 @@
+# =============================================================================
+# PRODUCTION Environment Values
+# =============================================================================
+# Image tags promoted từ staging thông qua promote-environment workflow
+# ArgoCD KHÔNG auto-sync cho production - chỉ manual sync
+# Secrets sử dụng SealedSecrets hoặc External Secrets Operator
+# =============================================================================
+
+global:
+  environment: production
+  domain: tiktok-clone.com
+  imagePullPolicy: IfNotPresent
+
+namespace: tiktok-clone-prod
+
+# Production: Use managed database (RDS) instead of in-cluster
+postgresql:
+  enabled: false # Sử dụng AWS RDS hoặc Cloud SQL
+  # Connection via ExternalSecrets
+  # auth:
+  #   existingSecret: tiktok-db-credentials
+
+redis:
+  enabled: false # Sử dụng AWS ElastiCache hoặc Cloud Memorystore
+  # Connection via ExternalSecrets
+  # existingSecret: tiktok-redis-credentials
+
+kafka:
+  enabled: false # Sử dụng AWS MSK hoặc Confluent Cloud
+  # Connection via ExternalSecrets
+
+# =============================================================================
+# Services - Image tags promoted from STAGING
+# =============================================================================
+services:
+  gateway:
+    replicas: 3
+    image:
+      repository: ghcr.io/OWNER/tiktok/api-gateway
+      tag: latest # Promoted from staging
+    serviceType: ClusterIP
+    resources:
+      requests:
+        memory: '512Mi'
+        cpu: '500m'
+      limits:
+        memory: '1Gi'
+        cpu: '1000m'
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+
+  auth:
+    replicas: 3
+    image:
+      repository: ghcr.io/OWNER/tiktok/auth-service
+      tag: latest
+    resources:
+      requests:
+        memory: '512Mi'
+        cpu: '500m'
+      limits:
+        memory: '1Gi'
+        cpu: '1000m'
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+
+  video:
+    replicas: 3
+    image:
+      repository: ghcr.io/OWNER/tiktok/video-service
+      tag: latest
+    resources:
+      requests:
+        memory: '512Mi'
+        cpu: '500m'
+      limits:
+        memory: '1Gi'
+        cpu: '1000m'
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+
+  interaction:
+    replicas: 3
+    image:
+      repository: ghcr.io/OWNER/tiktok/interaction-service
+      tag: latest
+    resources:
+      requests:
+        memory: '512Mi'
+        cpu: '500m'
+      limits:
+        memory: '1Gi'
+        cpu: '1000m'
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+
+  notification:
+    replicas: 3
+    image:
+      repository: ghcr.io/OWNER/tiktok/notification-service
+      tag: latest
+    resources:
+      requests:
+        memory: '512Mi'
+        cpu: '500m'
+      limits:
+        memory: '1Gi'
+        cpu: '1000m'
+    autoscaling:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 8
+      targetCPUUtilizationPercentage: 70
+
+# Production secrets via External Secrets Operator
+secrets:
+  database:
+    # existingSecret: tiktok-db-credentials
+    username: ''
+    password: ''
+  jwt:
+    # existingSecret: tiktok-jwt-secrets
+    accessSecret: ''
+    refreshSecret: ''
+
+# Full monitoring for production
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+    resources:
+      requests:
+        memory: '1Gi'
+        cpu: '500m'
+      limits:
+        memory: '2Gi'
+        cpu: '1000m'
+  grafana:
+    enabled: true
+    resources:
+      requests:
+        memory: '512Mi'
+        cpu: '250m'
+  elasticsearch:
+    enabled: true
+    resources:
+      requests:
+        memory: '2Gi'
+        cpu: '1000m'
+  alertmanager:
+    enabled: true
+  loki:
+    enabled: true
+
+seeding:
+  enabled: false
+
+# Production Ingress with TLS
+ingress:
+  enabled: true
+  className: alb
+  host: api.tiktok-clone.com
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/certificate-arn: 'arn:aws:acm:REGION:ACCOUNT:certificate/CERT-ID'
+  tls:
+    - hosts:
+        - api.tiktok-clone.com
+      secretName: tiktok-tls-prod

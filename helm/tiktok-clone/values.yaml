@@ -1,0 +1,229 @@
+# =============================================================================
+# BASE VALUES - Shared across all environments
+# =============================================================================
+# Environment-specific overrides are in environments/<env>/values.yaml
+# ArgoCD merges: values.yaml + environments/<env>/values.yaml
+# =============================================================================
+
+global:
+  environment: development
+  domain: tiktok-clone.local
+  imagePullPolicy: IfNotPresent
+
+namespace: tiktok-clone
+
+# =============================================================================
+# Infrastructure
+# =============================================================================
+postgresql:
+  enabled: true
+  image:
+    repository: postgres
+    tag: '15-alpine'
+  auth:
+    username: postgres
+    password: 'postgres'
+    database: tiktok_clone
+  persistence:
+    size: 10Gi
+  resources:
+    requests:
+      memory: '256Mi'
+      cpu: '250m'
+    limits:
+      memory: '512Mi'
+      cpu: '500m'
+
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: '7-alpine'
+  persistence:
+    size: 5Gi
+  resources:
+    requests:
+      memory: '128Mi'
+      cpu: '100m'
+    limits:
+      memory: '256Mi'
+      cpu: '200m'
+
+kafka:
+  enabled: true
+  image:
+    repository: confluentinc/cp-kafka
+    tag: '7.6.0'
+  persistence:
+    size: 10Gi
+  brokers: 1
+  resources:
+    requests:
+      memory: '512Mi'
+      cpu: '250m'
+    limits:
+      memory: '1Gi'
+      cpu: '500m'
+
+# =============================================================================
+# Application Services (base config - images overridden per environment)
+# =============================================================================
+services:
+  gateway:
+    name: api-gateway
+    replicas: 1
+    image:
+      repository: ghcr.io/OWNER/tiktok/api-gateway
+      tag: latest
+    port: 4000
+    serviceType: ClusterIP
+    resources:
+      requests:
+        memory: '256Mi'
+        cpu: '200m'
+      limits:
+        memory: '512Mi'
+        cpu: '500m'
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 75
+
+  auth:
+    name: auth-service
+    replicas: 1
+    image:
+      repository: ghcr.io/OWNER/tiktok/auth-service
+      tag: latest
+    port: 4001
+    grpcPort: 50051
+    resources:
+      requests:
+        memory: '256Mi'
+        cpu: '200m'
+      limits:
+        memory: '512Mi'
+        cpu: '500m'
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+
+  video:
+    name: video-service
+    replicas: 1
+    image:
+      repository: ghcr.io/OWNER/tiktok/video-service
+      tag: latest
+    port: 4002
+    grpcPort: 50052
+    resources:
+      requests:
+        memory: '256Mi'
+        cpu: '200m'
+      limits:
+        memory: '512Mi'
+        cpu: '500m'
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+
+  interaction:
+    name: interaction-service
+    replicas: 1
+    image:
+      repository: ghcr.io/OWNER/tiktok/interaction-service
+      tag: latest
+    port: 4003
+    grpcPort: 50053
+    resources:
+      requests:
+        memory: '256Mi'
+        cpu: '200m'
+      limits:
+        memory: '512Mi'
+        cpu: '500m'
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+
+  notification:
+    name: notification-service
+    replicas: 1
+    image:
+      repository: ghcr.io/OWNER/tiktok/notification-service
+      tag: latest
+    port: 4004
+    grpcPort: 50054
+    resources:
+      requests:
+        memory: '256Mi'
+        cpu: '200m'
+      limits:
+        memory: '512Mi'
+        cpu: '500m'
+    autoscaling:
+      enabled: false
+      minReplicas: 1
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+
+# =============================================================================
+# Secrets (base - override with SealedSecrets/ExternalSecrets in prod)
+# =============================================================================
+secrets:
+  database:
+    username: postgres
+    password: 'postgres'
+  jwt:
+    accessSecret: 'change-in-production'
+    refreshSecret: 'change-in-production'
+
+# =============================================================================
+# Monitoring
+# =============================================================================
+monitoring:
+  enabled: false
+  prometheus:
+    enabled: false
+  grafana:
+    enabled: false
+  elasticsearch:
+    enabled: false
+  alertmanager:
+    enabled: false
+  loki:
+    enabled: false
+
+# =============================================================================
+# Migration & Seeding
+# =============================================================================
+migration:
+  enabled: true
+  image:
+    repository: ghcr.io/OWNER/tiktok/migration
+    tag: latest
+  targetService: all
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+
+seeding:
+  enabled: false
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 2
+
+# =============================================================================
+# Ingress
+# =============================================================================
+ingress:
+  enabled: false
+  className: ''
+  host: ''
+  annotations: {}
+  tls: []

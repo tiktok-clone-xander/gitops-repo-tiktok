@@ -1,0 +1,139 @@
+# =============================================================================
+# DEV Environment Values
+# =============================================================================
+# File này được CD pipeline tự động update image tags
+# ArgoCD merges: helm/values.yaml + environments/dev/values.yaml
+# =============================================================================
+
+global:
+  environment: dev
+  domain: dev.tiktok-clone.local
+  imagePullPolicy: Always
+
+namespace: tiktok-clone-dev
+
+# Minimal resources for dev
+postgresql:
+  persistence:
+    size: 5Gi
+  resources:
+    requests:
+      memory: '128Mi'
+      cpu: '100m'
+    limits:
+      memory: '256Mi'
+      cpu: '250m'
+
+redis:
+  persistence:
+    size: 2Gi
+  resources:
+    requests:
+      memory: '64Mi'
+      cpu: '50m'
+
+kafka:
+  persistence:
+    size: 5Gi
+  resources:
+    requests:
+      memory: '256Mi'
+      cpu: '100m'
+
+# =============================================================================
+# Services - Image tags updated automatically by CD pipeline
+# =============================================================================
+services:
+  gateway:
+    replicas: 1
+    image:
+      repository: ghcr.io/OWNER/tiktok/api-gateway
+      tag: latest # Updated by CD pipeline
+    resources:
+      requests:
+        memory: '128Mi'
+        cpu: '100m'
+      limits:
+        memory: '256Mi'
+        cpu: '250m'
+    autoscaling:
+      enabled: false
+
+  auth:
+    replicas: 1
+    image:
+      repository: ghcr.io/OWNER/tiktok/auth-service
+      tag: latest
+    resources:
+      requests:
+        memory: '128Mi'
+        cpu: '100m'
+      limits:
+        memory: '256Mi'
+        cpu: '250m'
+    autoscaling:
+      enabled: false
+
+  video:
+    replicas: 1
+    image:
+      repository: ghcr.io/OWNER/tiktok/video-service
+      tag: latest
+    resources:
+      requests:
+        memory: '128Mi'
+        cpu: '100m'
+      limits:
+        memory: '256Mi'
+        cpu: '250m'
+    autoscaling:
+      enabled: false
+
+  interaction:
+    replicas: 1
+    image:
+      repository: ghcr.io/OWNER/tiktok/interaction-service
+      tag: latest
+    resources:
+      requests:
+        memory: '128Mi'
+        cpu: '100m'
+      limits:
+        memory: '256Mi'
+        cpu: '250m'
+    autoscaling:
+      enabled: false
+
+  notification:
+    replicas: 1
+    image:
+      repository: ghcr.io/OWNER/tiktok/notification-service
+      tag: latest
+    resources:
+      requests:
+        memory: '128Mi'
+        cpu: '100m'
+      limits:
+        memory: '256Mi'
+        cpu: '250m'
+    autoscaling:
+      enabled: false
+
+# Dev: Enable monitoring for debugging
+monitoring:
+  enabled: true
+  prometheus:
+    enabled: true
+  grafana:
+    enabled: true
+  loki:
+    enabled: true
+
+# Dev: Enable seeding
+seeding:
+  enabled: true
+
+ingress:
+  enabled: true
+  className: nginx
+  host: dev.tiktok-clone.local

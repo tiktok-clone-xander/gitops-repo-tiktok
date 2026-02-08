@@ -1,0 +1,178 @@
+# =============================================================================
+# GITOPS CD PIPELINE - UPDATE IMAGE TAGS
+# =============================================================================
+# Repo: tiktok-gitops (GitOps Deployment Repository)
+#
+# Workflow này được TRIGGER bởi CI pipeline từ tiktok-app repo
+# thông qua repository_dispatch event.
+#
+# Flow:
+# 1. Nhận event từ CI repo (chứa version, services, environment)
+# 2. Update image tags trong environment values file
+# 3. Commit & push thay đổi
+# 4. ArgoCD tự động detect và sync lên K8s
+# =============================================================================
+
+name: CD - Update Image Tags
+
+on:
+  repository_dispatch:
+    types: [update-image-tags]
+
+  # Manual trigger để update image tags
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options: [dev, staging, production]
+      version:
+        description: 'Image tag version'
+        required: true
+        type: string
+      services:
+        description: 'Services to update (comma-separated or "all")'
+        required: false
+        default: 'all'
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  update-tags:
+    name: Update Image Tags
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      # Parse payload from CI repo or manual input
+      - name: Parse parameters
+        id: params
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            ENV="${{ github.event.client_payload.environment }}"
+            VERSION="${{ github.event.client_payload.version }}"
+            SERVICES='${{ toJson(github.event.client_payload.services) }}'
+            REGISTRY="${{ github.event.client_payload.registry }}"
+            IMAGE_PREFIX="${{ github.event.client_payload.image_prefix }}"
+            SOURCE_SHA="${{ github.event.client_payload.source_sha }}"
+            SOURCE_BRANCH="${{ github.event.client_payload.source_branch }}"
+            ACTOR="${{ github.event.client_payload.actor }}"
+          else
+            ENV="${{ inputs.environment }}"
+            VERSION="${{ inputs.version }}"
+            SERVICES="${{ inputs.services }}"
+            REGISTRY="${{ env.REGISTRY }}"
+            IMAGE_PREFIX="${{ github.repository_owner }}/tiktok"
+            SOURCE_SHA="manual"
+            SOURCE_BRANCH="manual"
+            ACTOR="${{ github.actor }}"
+          fi
+
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "services=$SERVICES" >> $GITHUB_OUTPUT
+          echo "registry=$REGISTRY" >> $GITHUB_OUTPUT
+          echo "image_prefix=$IMAGE_PREFIX" >> $GITHUB_OUTPUT
+          echo "source_sha=$SOURCE_SHA" >> $GITHUB_OUTPUT
+          echo "source_branch=$SOURCE_BRANCH" >> $GITHUB_OUTPUT
+          echo "actor=$ACTOR" >> $GITHUB_OUTPUT
+
+      # Update image tags in environment values file
+      - name: Update image tags
+        run: |
+          ENV="${{ steps.params.outputs.environment }}"
+          VERSION="${{ steps.params.outputs.version }}"
+          REGISTRY="${{ steps.params.outputs.registry }}"
+          IMAGE_PREFIX="${{ steps.params.outputs.image_prefix }}"
+
+          VALUES_FILE="environments/${ENV}/values.yaml"
+          echo "Updating $VALUES_FILE with version $VERSION"
+
+          # Map service names to values keys
+          declare -A SERVICE_MAP=(
+            ["api-gateway"]="gateway"
+            ["auth-service"]="auth"
+            ["video-service"]="video"
+            ["interaction-service"]="interaction"
+            ["notification-service"]="notification"
+          )
+
+          # Determine which services to update
+          SERVICES='${{ steps.params.outputs.services }}'
+
+          if [ "$SERVICES" == "all" ] || [ -z "$SERVICES" ]; then
+            UPDATE_LIST=("api-gateway" "auth-service" "video-service" "interaction-service" "notification-service")
+          else
+            # Parse JSON array or comma-separated list
+            if echo "$SERVICES" | jq -e . > /dev/null 2>&1; then
+              readarray -t UPDATE_LIST < <(echo "$SERVICES" | jq -r '.[]')
+            else
+              IFS=',' read -ra UPDATE_LIST <<< "$SERVICES"
+            fi
+          fi
+
+          for service in "${UPDATE_LIST[@]}"; do
+            service=$(echo "$service" | xargs) # trim whitespace
+            KEY="${SERVICE_MAP[$service]}"
+
+            if [ -n "$KEY" ]; then
+              IMAGE="${REGISTRY}/${IMAGE_PREFIX}/${service}"
+              echo "  Updating services.${KEY}.image → ${IMAGE}:${VERSION}"
+
+              yq -i ".services.${KEY}.image.repository = \"${IMAGE}\"" "$VALUES_FILE"
+              yq -i ".services.${KEY}.image.tag = \"${VERSION}\"" "$VALUES_FILE"
+            fi
+          done
+
+          echo ""
+          echo "Updated values:"
+          yq '.services | ... comments=""' "$VALUES_FILE" | head -40
+
+      # Commit and push
+      - name: Commit and push
+        run: |
+          git config user.email "gitops-bot@tiktok-clone.local"
+          git config user.name "GitOps Bot"
+
+          ENV="${{ steps.params.outputs.environment }}"
+          VERSION="${{ steps.params.outputs.version }}"
+          SOURCE_SHA="${{ steps.params.outputs.source_sha }}"
+
+          git add environments/
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git commit -m "deploy(${ENV}): update images to ${VERSION}
+
+          Source commit: ${SOURCE_SHA}
+          Source branch: ${{ steps.params.outputs.source_branch }}
+          Triggered by: ${{ steps.params.outputs.actor }}
+          Services: ${{ steps.params.outputs.services }}"
+
+          git push
+
+      - name: Summary
+        run: |
+          echo "## CD - Image Tags Updated" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | ${{ steps.params.outputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version** | \`${{ steps.params.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Source SHA** | \`${{ steps.params.outputs.source_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> ArgoCD sẽ tự động sync thay đổi này lên K8s cluster" >> $GITHUB_STEP_SUMMARY

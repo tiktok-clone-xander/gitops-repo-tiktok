@@ -1,0 +1,14 @@
+apiVersion: v2
+name: tiktok-clone
+description: Helm chart for TikTok Clone microservices
+type: application
+version: 1.0.0
+appVersion: '1.0.0'
+keywords:
+  - tiktok-clone
+  - microservices
+  - kubernetes
+  - nestjs
+maintainers:
+  - name: TikTok Clone Team
+    email: dev@tiktok-clone.local

@@ -1,0 +1,147 @@
+# =============================================================================
+# EMERGENCY ROLLBACK
+# =============================================================================
+# Rollback một environment về version trước đó
+# Sử dụng ArgoCD history để rollback
+# =============================================================================
+
+name: Emergency Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to rollback'
+        required: true
+        type: choice
+        options: [dev, staging, production]
+      rollback_version:
+        description: 'Specific version to rollback to (leave empty for previous)'
+        required: false
+        type: string
+      reason:
+        description: 'Reason for rollback'
+        required: true
+        type: string
+
+jobs:
+  rollback:
+    name: Rollback ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    # Production rollback requires approval
+    environment: ${{ inputs.environment == 'production' && 'production-approval' || 'default' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Install tools
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+          # Install ArgoCD CLI
+          curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          chmod +x /usr/local/bin/argocd
+
+      # Option 1: Git-based rollback (preferred for GitOps)
+      - name: Git-based rollback
+        if: inputs.rollback_version == ''
+        run: |
+          ENV="${{ inputs.environment }}"
+          VALUES_FILE="environments/${ENV}/values.yaml"
+
+          echo "Rolling back $VALUES_FILE to previous version..."
+
+          # Get previous commit that modified this file
+          PREV_COMMIT=$(git log --format="%H" -2 -- "$VALUES_FILE" | tail -1)
+
+          if [ -z "$PREV_COMMIT" ]; then
+            echo "❌ No previous version found"
+            exit 1
+          fi
+
+          echo "Restoring from commit: $PREV_COMMIT"
+          git checkout "$PREV_COMMIT" -- "$VALUES_FILE"
+
+      # Option 2: Rollback to specific version
+      - name: Version-based rollback
+        if: inputs.rollback_version != ''
+        run: |
+          ENV="${{ inputs.environment }}"
+          VALUES_FILE="environments/${ENV}/values.yaml"
+          VERSION="${{ inputs.rollback_version }}"
+
+          echo "Setting all services to version: $VERSION"
+
+          for KEY in gateway auth video interaction notification; do
+            yq -i ".services.${KEY}.image.tag = \"${VERSION}\"" "$VALUES_FILE"
+          done
+
+      - name: Commit rollback
+        run: |
+          git config user.email "gitops-bot@tiktok-clone.local"
+          git config user.name "GitOps Bot"
+          git add environments/
+
+          if git diff --staged --quiet; then
+            echo "No changes - already at target version"
+            exit 0
+          fi
+
+          git commit -m "ROLLBACK(${{ inputs.environment }}): ${{ inputs.reason }}
+
+          Rolled back by: ${{ github.actor }}
+          Version: ${{ inputs.rollback_version || 'previous' }}
+          Reason: ${{ inputs.reason }}"
+
+          git push
+
+      # ArgoCD-based rollback (if cluster access available)
+      - name: ArgoCD rollback
+        if: env.ARGOCD_SERVER != ''
+        env:
+          ARGOCD_SERVER: ${{ secrets.ARGOCD_SERVER }}
+        run: |
+          ENV="${{ inputs.environment }}"
+          APP_NAME="tiktok-clone-${ENV}"
+
+          argocd login ${{ secrets.ARGOCD_SERVER }} \
+            --username ${{ secrets.ARGOCD_USERNAME }} \
+            --password ${{ secrets.ARGOCD_PASSWORD }} \
+            --insecure
+
+          # Force sync to pick up the rollback commit
+          argocd app sync "$APP_NAME" --force --prune
+          argocd app wait "$APP_NAME" --timeout 300
+
+          echo "✅ ArgoCD rollback sync complete"
+        continue-on-error: true
+
+      - name: Create GitHub Issue for tracking
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🔴 ROLLBACK: ${{ inputs.environment }} - ${{ inputs.reason }}`,
+              body: `## Emergency Rollback
+
+              | Item | Value |
+              |------|-------|
+              | Environment | ${{ inputs.environment }} |
+              | Version | ${{ inputs.rollback_version || 'previous' }} |
+              | Reason | ${{ inputs.reason }} |
+              | Actor | ${{ github.actor }} |
+              | Time | ${new Date().toISOString()} |
+
+              ### Action Items
+              - [ ] Root cause analysis
+              - [ ] Fix the issue in app repo
+              - [ ] Verify fix in dev environment
+              - [ ] Re-deploy to affected environment`,
+              labels: ['rollback', 'incident', '${{ inputs.environment }}']
+            });
