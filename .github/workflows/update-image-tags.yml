@@ -79,6 +79,11 @@ jobs:
             ACTOR="${{ github.actor }}"
           fi
 
+          # Compact JSON to single line if it's an array
+          if echo "$SERVICES" | jq -e . > /dev/null 2>&1; then
+            SERVICES=$(echo "$SERVICES" | jq -c .)
+          fi
+
           echo "environment=$ENV" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "services=$SERVICES" >> $GITHUB_OUTPUT
