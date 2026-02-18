@@ -10,25 +10,20 @@ global:
   environment: production
   domain: tiktok-clone.com
   imagePullPolicy: IfNotPresent
-
 namespace: tiktok-clone-prod
-
 # Production: Use managed database (RDS) instead of in-cluster
 postgresql:
   enabled: false # Sử dụng AWS RDS hoặc Cloud SQL
   # Connection via ExternalSecrets
   # auth:
   #   existingSecret: tiktok-db-credentials
-
 redis:
   enabled: false # Sử dụng AWS ElastiCache hoặc Cloud Memorystore
   # Connection via ExternalSecrets
   # existingSecret: tiktok-redis-credentials
-
 kafka:
   enabled: false # Sử dụng AWS MSK hoặc Confluent Cloud
   # Connection via ExternalSecrets
-
 # =============================================================================
 # Services - Image tags promoted from STAGING
 # =============================================================================
@@ -36,8 +31,8 @@ services:
   gateway:
     replicas: 3
     image:
-      repository: ghcr.io/OWNER/tiktok/api-gateway
-      tag: latest # Promoted from staging
+      repository: ghcr.io/tiktok-clone-xander/tiktok/api-gateway
+      tag: 6fcce31-20260218081439 # Promoted from staging
     serviceType: ClusterIP
     resources:
       requests:
@@ -51,12 +46,11 @@ services:
       minReplicas: 3
       maxReplicas: 10
       targetCPUUtilizationPercentage: 70
-
   auth:
     replicas: 3
     image:
-      repository: ghcr.io/OWNER/tiktok/auth-service
-      tag: latest
+      repository: ghcr.io/tiktok-clone-xander/tiktok/auth-service
+      tag: 6fcce31-20260218081439
     resources:
       requests:
         memory: '512Mi'
@@ -69,12 +63,11 @@ services:
       minReplicas: 3
       maxReplicas: 8
       targetCPUUtilizationPercentage: 70
-
   video:
     replicas: 3
     image:
-      repository: ghcr.io/OWNER/tiktok/video-service
-      tag: latest
+      repository: ghcr.io/tiktok-clone-xander/tiktok/video-service
+      tag: 6fcce31-20260218081439
     resources:
       requests:
         memory: '512Mi'
@@ -87,12 +80,11 @@ services:
       minReplicas: 3
       maxReplicas: 8
       targetCPUUtilizationPercentage: 70
-
   interaction:
     replicas: 3
     image:
-      repository: ghcr.io/OWNER/tiktok/interaction-service
-      tag: latest
+      repository: ghcr.io/tiktok-clone-xander/tiktok/interaction-service
+      tag: 6fcce31-20260218081439
     resources:
       requests:
         memory: '512Mi'
@@ -105,12 +97,11 @@ services:
       minReplicas: 3
       maxReplicas: 8
       targetCPUUtilizationPercentage: 70
-
   notification:
     replicas: 3
     image:
-      repository: ghcr.io/OWNER/tiktok/notification-service
-      tag: latest
+      repository: ghcr.io/tiktok-clone-xander/tiktok/notification-service
+      tag: 6fcce31-20260218081439
     resources:
       requests:
         memory: '512Mi'
@@ -123,7 +114,6 @@ services:
       minReplicas: 3
       maxReplicas: 8
       targetCPUUtilizationPercentage: 70
-
 # Production secrets via External Secrets Operator
 secrets:
   database:
@@ -134,7 +124,6 @@ secrets:
     # existingSecret: tiktok-jwt-secrets
     accessSecret: ''
     refreshSecret: ''
-
 # Full monitoring for production
 monitoring:
   enabled: true
@@ -163,10 +152,8 @@ monitoring:
     enabled: true
   loki:
     enabled: true
-
 seeding:
   enabled: false
-
 # Production Ingress with TLS
 ingress:
   enabled: true
